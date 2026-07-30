@@ -49,4 +49,3 @@ void loop() {
   lastSampleMs = nowMs;
   sendTelemetry(nowMs);
 }
-

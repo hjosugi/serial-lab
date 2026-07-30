@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/hjosugi/serial-lab/security/policy
+    about: 公開 Issue に詳細を書かず、Security Policy の手順を確認してください。
+  - name: Serial Studio upstream
+    url: https://github.com/Serial-Studio/Serial-Studio
+    about: Serial Studio 本体の不具合は upstream の既存 Issue も確認してください。

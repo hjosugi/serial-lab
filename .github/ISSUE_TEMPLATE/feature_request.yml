@@ -1,0 +1,40 @@
+name: Feature request
+description: 改善案または新しい利用例を提案する
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 解決したい問題
+      description: 機能そのものではなく、困っている状況を説明してください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 提案
+      description: 望ましい動作、データ契約、UI を具体的に記載してください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 検討した代替案
+
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: 互換性への影響
+      description: CSV 列、`.ssproj`、CLI、firmware への影響があれば記載してください。
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: スコープ確認
+      options:
+        - label: 既存 Issue と upstream Serial Studio の機能を確認しました
+          required: true
