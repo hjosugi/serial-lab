@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to create, for example v0.1.0
+        required: true
+        type: string
+      prerelease:
+        description: Mark the release as a pre-release
+        required: false
+        default: true
+        type: boolean
+      notes:
+        description: Release notes. When empty, notes are generated from merged pull requests.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Tag and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      # Inputs are passed through env, never interpolated into the script body,
+      # so a crafted tag or notes value cannot inject shell commands.
+      - name: Create tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+          TARGET: ${{ github.sha }}
+          PRERELEASE: ${{ inputs.prerelease }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          set -euo pipefail
+
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Tag must look like v1.2.3, got: $TAG"
+            exit 1
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::Release $TAG already exists"
+            exit 1
+          fi
+
+          args=("$TAG" --title "$TAG" --target "$TARGET")
+
+          if [ -n "$NOTES" ]; then
+            printf '%s\n' "$NOTES" > "$RUNNER_TEMP/notes.md"
+            args+=(--notes-file "$RUNNER_TEMP/notes.md")
+          else
+            args+=(--generate-notes)
+          fi
+
+          if [ "$PRERELEASE" = "true" ]; then
+            args+=(--prerelease)
+          fi
+
+          gh release create "${args[@]}"
