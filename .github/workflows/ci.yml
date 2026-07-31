@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.14"]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compile Python sources
+        run: python -m compileall -q simulator tests
+
+      - name: Run unit and UDP integration tests
+        run: python -m unittest discover -s tests -v
+
+  quality:
+    name: Python quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install quality tools
+        run: python -m pip install --requirement requirements-dev.txt
+
+      - name: Lint
+        run: ruff check simulator tests
+
+      - name: Check formatting
+        run: ruff format --check simulator tests
+
+      - name: Type-check
+        run: mypy
+
+  firmware:
+    name: Arduino (${{ matrix.board }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - board: ESP32
+            fqbn: esp32:esp32:esp32
+          - board: ESP32-C3
+            fqbn: esp32:esp32:esp32c3
+          - board: ESP32-S3
+            fqbn: esp32:esp32:esp32s3
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Arduino CLI
+        env:
+          ARDUINO_CLI_SHA256: 28a8e119c498a25607821c36cb2dc49e8463941b261a0d99091baa7bc692dd2b
+          ARDUINO_CLI_VERSION: 1.5.1
+        run: |
+          archive="arduino-cli_${ARDUINO_CLI_VERSION}_Linux_64bit.tar.gz"
+          archive_path="$RUNNER_TEMP/$archive"
+          install_dir="$RUNNER_TEMP/arduino-cli-bin"
+          url="https://github.com/arduino/arduino-cli/releases/download/v${ARDUINO_CLI_VERSION}/$archive"
+
+          curl --fail --location --retry 3 --show-error \
+            --output "$archive_path" "$url"
+          printf '%s  %s\n' "$ARDUINO_CLI_SHA256" "$archive_path" \
+            | sha256sum --check -
+          mkdir "$install_dir"
+          tar -xzf "$archive_path" -C "$install_dir"
+          printf '%s\n' "$install_dir" >> "$GITHUB_PATH"
+          "$install_dir/arduino-cli" version
+
+      - name: Install Arduino-ESP32
+        run: |
+          arduino-cli core update-index \
+            --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp32:esp32@3.3.10 \
+            --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+
+      - name: Compile firmware
+        env:
+          FQBN: ${{ matrix.fqbn }}
+        run: |
+          arduino-cli compile \
+            --fqbn "$FQBN" \
+            firmware/esp32_serial_studio_demo

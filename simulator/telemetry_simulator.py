@@ -8,11 +8,24 @@ import math
 import socket
 import sys
 import time
-
+from collections.abc import Sequence
+from dataclasses import dataclass
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 9000
 DEFAULT_RATE_HZ = 20.0
+MAX_RATE_HZ = 1000.0
+
+
+@dataclass(frozen=True)
+class Config:
+    """Validated-at-runtime simulator settings."""
+
+    host: str = DEFAULT_HOST
+    port: int = DEFAULT_PORT
+    rate: float = DEFAULT_RATE_HZ
+    count: int = 0
+    stdout: bool = False
 
 
 def build_frame(elapsed_seconds: float) -> str:
@@ -35,7 +48,8 @@ def build_frame(elapsed_seconds: float) -> str:
     )
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: Sequence[str] | None = None) -> Config:
+    """Parse command-line arguments into an immutable configuration."""
     parser = argparse.ArgumentParser(
         description="Send six-column telemetry to Serial Studio over UDP."
     )
@@ -53,25 +67,40 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Also print each frame to stdout.",
     )
-    return parser.parse_args()
+    namespace = parser.parse_args(argv)
+    return Config(
+        host=namespace.host,
+        port=namespace.port,
+        rate=namespace.rate,
+        count=namespace.count,
+        stdout=namespace.stdout,
+    )
 
 
-def run(args: argparse.Namespace) -> None:
-    if args.rate <= 0:
-        raise ValueError("--rate must be greater than zero")
-    if not 1 <= args.port <= 65535:
+def validate_config(config: Config) -> None:
+    """Reject values that could produce invalid or unbounded behavior."""
+    if not config.host.strip():
+        raise ValueError("--host must not be empty")
+    if not math.isfinite(config.rate) or not 0 < config.rate <= MAX_RATE_HZ:
+        raise ValueError(f"--rate must be finite and between 0 and {MAX_RATE_HZ:g}")
+    if not 1 <= config.port <= 65535:
         raise ValueError("--port must be between 1 and 65535")
-    if args.count < 0:
+    if config.count < 0:
         raise ValueError("--count must be zero or greater")
 
-    interval = 1.0 / args.rate
-    address = (args.host, args.port)
+
+def run(config: Config) -> None:
+    """Send frames until the configured count is reached or interrupted."""
+    validate_config(config)
+
+    interval = 1.0 / config.rate
+    address = (config.host, config.port)
     started_at = time.monotonic()
     next_send_at = started_at
     sent = 0
 
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
-        while args.count == 0 or sent < args.count:
+        while config.count == 0 or sent < config.count:
             now = time.monotonic()
             if now < next_send_at:
                 time.sleep(next_send_at - now)
@@ -80,7 +109,7 @@ def run(args: argparse.Namespace) -> None:
             frame = build_frame(elapsed_seconds)
             udp_socket.sendto(frame.encode("utf-8"), address)
 
-            if args.stdout:
+            if config.stdout:
                 sys.stdout.write(frame)
                 sys.stdout.flush()
 
@@ -91,10 +120,11 @@ def run(args: argparse.Namespace) -> None:
                 next_send_at = time.monotonic()
 
 
-def main() -> int:
-    args = parse_args()
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the CLI and translate expected failures into exit codes."""
+    config = parse_args(argv)
     try:
-        run(args)
+        run(config)
     except KeyboardInterrupt:
         return 0
     except (OSError, ValueError) as error:
@@ -105,4 +135,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

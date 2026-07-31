@@ -1,0 +1,61 @@
+name: Bug report
+description: 再現可能な不具合を報告する
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        報告ありがとうございます。秘密情報や未公開の脆弱性はここに書かず、
+        `SECURITY.md` の手順を使ってください。
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: 概要
+      description: 期待した動作と実際の動作を簡潔に記載してください。
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 再現手順
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 環境
+      description: OS、Python、Serial Studio、Arduino-ESP32、ボード名を記載してください。
+      placeholder: |
+        OS:
+        Python:
+        Serial Studio:
+        Arduino-ESP32:
+        ESP32 board:
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: ログ・フレーム例
+      description: 個人情報、token、serial number などを除いて貼り付けてください。
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 事前確認
+      options:
+        - label: 既存 Issue に同じ報告がないことを確認しました
+          required: true
+        - label: 秘密情報を含めていません
+          required: true

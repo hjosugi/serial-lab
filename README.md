@@ -1,29 +1,43 @@
-# Serial Studio ESP32 Telemetry Sample
+# Serial Lab: ESP32 Telemetry for Serial Studio
 
-ESP32の内蔵情報と疑似波形をSerial Studioに表示する、追加センサー不要のサンプルです。
+[![CI](https://github.com/hjosugi/serial-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/hjosugi/serial-lab/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-以下の2通りで動かせます。
+ESP32 の内蔵情報と疑似波形を [Serial Studio](https://github.com/Serial-Studio/Serial-Studio) に表示する、追加センサー不要の日本語サンプルです。
 
-- ESP32実機: USBシリアル、115200 baud
-- PCのみ: PythonシミュレーターからUDP、`127.0.0.1:9000`
+次の2通りで同じダッシュボードを試せます。
 
-Serial StudioのFree/GPL版で利用できるUART、UDP、Project File、Quick Plot、Gauge、Bar、Meter、Multi-Plot、Data Grid、LED表示だけを使っています。
+- ESP32 実機: USB シリアル、115200 baud、20 Hz
+- PC のみ: Python 標準ライブラリによる UDP、`127.0.0.1:9000`、20 Hz
 
-## 表示するデータ
+UART、UDP、Project File、Quick Plot と標準 widget だけを使用します。必要機能は Serial Studio の GPL source build に含まれます。公式バイナリと Pro 機能の提供条件は upstream の最新説明を確認してください。
 
-ESP32とPythonシミュレーターは、同じ6列のCSVを20 Hzで送ります。
+## 現在の検証範囲
+
+| 対象 | 固定・検証 version | 自動検証 | 備考 |
+|---|---|---|---|
+| Serial Studio project | 4.0.3 / schema 3 | JSON と意味的契約 | 公式 4.0.3 UDP project と source 設定を照合 |
+| Python simulator | Python 3.10 / 3.14 | unit、CLI、UDP integration、Ruff、mypy | 実行時の外部 package なし |
+| ESP32 firmware | Arduino-ESP32 3.3.10 | ESP32 / C3 / S3 compile | upload と実描画は未検証 |
+| 実機受け入れ | Serial Studio 4.0.3 | 対象外 | 手順と結果記録は [#6](https://github.com/hjosugi/serial-lab/issues/6) |
+
+「コンパイル成功」と「実機で upload・描画成功」は分けて扱います。物理ボードで未確認の内容を検証済みとは表記しません。
+
+## 送信データ契約
+
+firmware と simulator は、同じ6列の改行区切り CSV を送ります。
 
 ```text
-chip_temperature_c,free_heap_kb,uptime_s,sine,triangle,boot_button
+chip_temperature_c,free_heap_kib,uptime_s,sine,triangle,boot_button
 ```
 
-実際のフレーム例:
+フレーム例:
 
 ```text
 43.25,287.00,12.50,0.7071,-0.5000,0
 ```
 
-| Index | Dataset | Unit | Dashboard |
+| Index | Dataset | 単位 | 表示 |
 |---:|---|---|---|
 | 1 | Chip Temperature | deg C | Gauge + Plot |
 | 2 | Free Heap | KiB | Bar |
@@ -32,114 +46,215 @@ chip_temperature_c,free_heap_kb,uptime_s,sine,triangle,boot_button
 | 5 | Triangle Wave | - | Multi-Plot |
 | 6 | BOOT Button | 0/1 | Data Grid + LED |
 
-## ESP32で動かす
+列順は `.ssproj` の dataset index と直結しています。変更するときは firmware、simulator、両 project file、テスト、README を同時に更新してください。
 
-### 必要なもの
+## PC だけで最短実行
 
-- ESP32開発ボード
-- USBデータケーブル
-- Arduino IDE
-- Arduino-ESP32 core
-- Serial Studio 4.0.3以降
+### PC に必要なもの
 
-### 手順
+- Python 3.10 以降
+- Serial Studio 4.0.3
 
-1. Arduino IDEで`firmware/esp32_serial_studio_demo.ino`を開きます。
-2. 使用するESP32ボードとシリアルポートを選びます。
-3. ESP32へアップロードします。
-4. Serial Studioで`dashboard/esp32_serial_dashboard.ssproj`を開きます。
-5. ESP32のシリアルポートを選び、baud rateを`115200`にします。
-6. `Connect`を押します。
-7. BOOTボタンを押すと`BOOT Button`が`1`になります。
-
-一般的なESP32 DevKitではBOOTボタンはGPIO 0です。別のピンを使うボードでは、スケッチ先頭の`BUTTON_PIN`を変更してください。
-
-ESP32の`temperatureRead()`はチップ内部温度です。室温センサーではないため、室温より高く表示されることがあります。
-
-## PCだけで動かす
-
-追加パッケージは不要です。Python 3の標準ライブラリだけを使います。
+追加 package は不要です。
 
 ```bash
 python simulator/telemetry_simulator.py
 ```
 
-次にSerial Studioで`dashboard/desktop_udp_dashboard.ssproj`を開き、`Connect`を押します。接続設定は次の値で保存済みです。
+次に Serial Studio で `dashboard/desktop_udp_dashboard.ssproj` を開き、`Connect` を押します。project file には次の接続設定が保存されています。
 
 - Transport: UDP
 - Address: `127.0.0.1`
 - Local port: `9000`
 - Remote port: `9000`
 
-10秒だけ実行する例:
+終了は `Ctrl+C` です。10秒相当の200 frame だけ送る例:
 
 ```bash
 python simulator/telemetry_simulator.py --count 200
 ```
 
-フレームを標準出力でも確認する例:
+送信 frame を terminal にも表示する例:
 
 ```bash
 python simulator/telemetry_simulator.py --stdout --count 20
 ```
 
-## Quick Plotで動かす
+### Simulator CLI
 
-このサンプルは改行区切りの数値CSVなので、Project Fileを使わずQuick Plotでも表示できます。
+```text
+python simulator/telemetry_simulator.py [options]
+```
 
-1. ESP32版ではUARTと`115200`を選びます。
-2. PC版ではNetwork、UDP、local port `9000`を選びます。
-3. Operation Modeを`Quick Plot`にします。
-4. `Connect`を押します。
+| Option | Default | 制約・意味 |
+|---|---:|---|
+| `--host HOST` | `127.0.0.1` | 空でない IPv4 address または IPv4 へ解決できる hostname |
+| `--port PORT` | `9000` | `1`〜`65535` |
+| `--rate HZ` | `20.0` | 有限の正数、最大 `1000` Hz |
+| `--count N` | `0` | `0` 以上。`0` は停止するまで送信 |
+| `--stdout` | off | UDP と同じ frame を標準出力にも表示 |
 
-Quick Plotでは列名や単位は表示されません。名前付きのGaugeやMulti-Plotを使う場合は、同梱の`.ssproj`を開いてください。
+正常終了と `Ctrl+C` は exit code `0`、入力検証または socket error は stderr へ理由を出して `1` を返します。`argparse` 自体の構文エラーは `2` です。
 
-## テスト
+## ESP32 で実行
 
-プロジェクトJSON、dataset index、接続設定、シミュレーターのフレーム形式を確認します。
+### ESP32 に必要なもの
+
+- ESP32 開発ボード
+- USB データケーブル
+- Arduino IDE または Arduino CLI
+- Arduino-ESP32 3.3.10
+- Serial Studio 4.0.3
+
+### Arduino IDE
+
+1. `firmware/esp32_serial_studio_demo/esp32_serial_studio_demo.ino` を開きます。
+2. 使用する ESP32 ボードと serial port を選びます。
+3. ESP32 へ upload します。
+4. Serial Studio で `dashboard/esp32_serial_dashboard.ssproj` を開きます。
+5. ESP32 の serial port と `115200` baud を選びます。
+6. `Connect` を押します。
+7. BOOT button を押し、`BOOT Button` が `1`、解放時に `0` になることを確認します。
+
+一般的な ESP32 DevKit の BOOT button は GPIO 0 / active-low です。異なる pin のボードでは、スケッチ先頭の `BUTTON_PIN` を変更してください。
+
+ESP32-S3/C3 などでは Arduino IDE の `USB CDC On Boot` 設定が必要な場合があります。ボード固有の Arduino-ESP32 設定に従ってください。
+
+### Arduino CLI でコンパイル
+
+ESP32 DevKit の例:
 
 ```bash
+arduino-cli core update-index \
+  --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+arduino-cli core install esp32:esp32@3.3.10 \
+  --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+arduino-cli compile \
+  --fqbn esp32:esp32:esp32 \
+  firmware/esp32_serial_studio_demo
+```
+
+CI では FQBN `esp32:esp32:esp32`、`esp32:esp32:esp32c3`、`esp32:esp32:esp32s3` を個別にコンパイルします。
+
+## Quick Plot
+
+このサンプルは数値 CSV なので、Project File を使わず Quick Plot でも表示できます。
+
+1. ESP32 版では UART と `115200` baud、PC 版では Network / UDP / local port `9000` を選びます。
+2. Operation Mode を `Quick Plot` にします。
+3. `Connect` を押します。
+
+Quick Plot では列名や単位が付きません。名前付き Gauge や Multi-Plot には同梱 `.ssproj` を使用してください。
+
+## 開発・検証
+
+標準ライブラリだけで行える検証:
+
+```bash
+python -m compileall -q simulator tests
 python -m unittest discover -s tests -v
 ```
 
+品質 tool を含む完全なローカル検証:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --requirement requirements-dev.txt
+ruff check simulator tests
+ruff format --check simulator tests
+mypy
+```
+
+Windows PowerShell では activate に `.venv\Scripts\Activate.ps1` を使用してください。CI と依存 version は `requirements-dev.txt` と `.github/workflows/ci.yml` に固定しています。
+
+Markdown 文書の検証には Node.js / npm がある環境で次を使用できます。
+
+```bash
+npx --yes markdownlint-cli2@0.19.0 \
+  README.md CONTRIBUTING.md SECURITY.md .github/pull_request_template.md
+```
+
+テストが検証する主な契約:
+
+- frame の6列、数値 format、wave range、button cycle
+- CLI option、境界値、`NaN` / `Infinity` / 過大 rate の拒否
+- 指定 count の UDP 送信と標準出力
+- Serial Studio schema、parser、source 接続設定
+- dataset の index / title / unit / widget / range
+- UART / UDP dashboard の意図しない差分
+- group と dataset の ID、`nextUniqueId`
+- Arduino の主 sketch と directory 名の一致
+
+## 制約
+
+- `temperatureRead()` は ESP32 内部の chip temperature です。室温センサーではなく、室温より高く表示されることがあります。
+- BOOT button の pin と USB 設定はボードごとに異なります。
+- UDP simulator は IPv4 socket を使用します。
+- 現在の Uptime は firmware の `millis()` 起点です。Meter は1時間で表示上限に達し、値は約49.7日で wrap します。長時間仕様は [#7](https://github.com/hjosugi/serial-lab/issues/7) で追跡します。
+- 自動コンパイルは実機 upload、USB 再接続、Serial Studio GUI の描画を保証しません。
+
 ## トラブルシューティング
 
-### データが表示されない
+### UART データが表示されない
 
-- ESP32とSerial Studioのbaud rateが両方`115200`か確認します。
-- Arduino IDEのSerial Monitorを閉じます。同じシリアルポートを2つのアプリから同時には開けません。
-- Project Fileモードになっているか確認します。
-- Consoleで1行に6個の数値が出ているか確認します。
+- ESP32 と Serial Studio が両方 `115200` baud か確認します。
+- Arduino IDE の Serial Monitor を閉じます。同じ port は同時に占有できません。
+- Project File mode か確認します。
+- Console で1行に6個の数値が届いているか確認します。
+- S3/C3 では `USB CDC On Boot` を確認します。
 
-### UDP版が表示されない
+### UDP データが表示されない
 
-- Pythonシミュレーターを先に起動します。
-- UDP local portが`9000`か確認します。
-- 別のアプリがport `9000`を使用していないか確認します。
-- OSのファイアウォールでPythonのlocalhost通信が拒否されていないか確認します。
+- simulator を先に起動します。
+- UDP local port が `9000` か確認します。
+- 別の process が port `9000` を使っていないか確認します。
+- OS firewall が Python の localhost UDP を拒否していないか確認します。
+- `--stdout --count 20` で simulator 自体が frame を生成しているか確認します。
 
-### ESP32-S3/C3でシリアルポートが出ない
+### CLI が入力を拒否する
 
-Arduino IDEのボード設定でUSB CDC On Bootが必要なボードがあります。使用するボードのArduino-ESP32設定に合わせて有効にしてください。
+- `--rate` は `0` より大きく `1000` 以下の有限値です。
+- `--port` は `1`〜`65535` です。
+- `--count` は `0` 以上です。
+- stderr の `error:` 以降に拒否理由が表示されます。
 
 ## 構成
 
 ```text
-serial-studio-esp32-sample/
+serial-lab/
+├── .github/
+│   ├── ISSUE_TEMPLATE/
+│   └── workflows/ci.yml
 ├── dashboard/
 │   ├── desktop_udp_dashboard.ssproj
 │   └── esp32_serial_dashboard.ssproj
 ├── firmware/
-│   └── esp32_serial_studio_demo.ino
+│   └── esp32_serial_studio_demo/
+│       └── esp32_serial_studio_demo.ino
 ├── simulator/
+│   ├── __init__.py
 │   └── telemetry_simulator.py
 ├── tests/
-│   └── test_sample.py
+│   ├── test_firmware_layout.py
+│   ├── test_project_files.py
+│   └── test_simulator.py
+├── CONTRIBUTING.md
 ├── LICENSE
-└── README.md
+├── README.md
+├── SECURITY.md
+├── pyproject.toml
+└── requirements-dev.txt
 ```
 
-## Compatibility
+## Upstream とライセンス
 
-このサンプルの`.ssproj`はSerial Studio 4.0.3の`schemaVersion: 3`に合わせています。パーサーはSerial Studio 4.xのBuilt-In `Delimited text`テンプレートを使用します。
+- [Serial Studio 4.0.3 release](https://github.com/Serial-Studio/Serial-Studio/releases/tag/v4.0.3)
+- [Serial Studio source and feature overview](https://github.com/Serial-Studio/Serial-Studio)
+- [Arduino-ESP32 3.3.10 documentation](https://docs.espressif.com/projects/arduino-esp32/en/latest/)
+- [Arduino CLI](https://github.com/arduino/arduino-cli)
+- [Python socket documentation](https://docs.python.org/3/library/socket.html)
 
+このリポジトリのコードと文書は [MIT License](LICENSE) です。Serial Studio、Arduino-ESP32、利用する tool と binary にはそれぞれの upstream license と利用条件が適用されます。
+
+貢献手順は [CONTRIBUTING.md](CONTRIBUTING.md)、脆弱性の非公開報告は [SECURITY.md](SECURITY.md) を参照してください。
