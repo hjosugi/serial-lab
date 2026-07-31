@@ -15,6 +15,8 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 9000
 DEFAULT_RATE_HZ = 20.0
 MAX_RATE_HZ = 1000.0
+SINE_PERIOD_S = 2.0
+TRIANGLE_PERIOD_S = 4.0
 
 
 @dataclass(frozen=True)
@@ -28,13 +30,23 @@ class Config:
     stdout: bool = False
 
 
+def wave_phase(elapsed_seconds: float, period_seconds: float) -> float:
+    """Reduce elapsed time to one waveform period, in radians.
+
+    The firmware performs the same reduction so that its 32-bit float phase
+    keeps full resolution on long runs. Mirroring it here keeps both telemetry
+    sources on identical waveform semantics.
+    """
+    return 2.0 * math.pi * math.fmod(elapsed_seconds, period_seconds) / period_seconds
+
+
 def build_frame(elapsed_seconds: float) -> str:
     """Build one six-column CSV telemetry frame."""
     temperature_c = 42.0 + 3.0 * math.sin(2.0 * math.pi * 0.03 * elapsed_seconds)
     free_heap_kib = 286.0 - 4.0 * math.sin(2.0 * math.pi * 0.01 * elapsed_seconds)
-    sine = math.sin(2.0 * math.pi * 0.50 * elapsed_seconds)
+    sine = math.sin(wave_phase(elapsed_seconds, SINE_PERIOD_S))
     triangle = (2.0 / math.pi) * math.asin(
-        math.sin(2.0 * math.pi * 0.25 * elapsed_seconds)
+        math.sin(wave_phase(elapsed_seconds, TRIANGLE_PERIOD_S))
     )
     button_pressed = 1 if int(elapsed_seconds) % 10 >= 5 else 0
 

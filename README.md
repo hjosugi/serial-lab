@@ -41,12 +41,23 @@ chip_temperature_c,free_heap_kib,uptime_s,sine,triangle,boot_button
 |---:|---|---|---|
 | 1 | Chip Temperature | deg C | Gauge + Plot |
 | 2 | Free Heap | KiB | Bar |
-| 3 | Uptime | s | Meter |
+| 3 | Uptime | s | Meter（0〜86400 s）|
 | 4 | Sine Wave | - | Multi-Plot |
 | 5 | Triangle Wave | - | Multi-Plot |
 | 6 | BOOT Button | 0/1 | Data Grid + LED |
 
 列順は `.ssproj` の dataset index と直結しています。変更するときは firmware、simulator、両 project file、テスト、README を同時に更新してください。
+
+### Uptime と連続稼働時間
+
+想定する最大連続稼働時間は **24 時間（86400 s）** です。Uptime Meter の range はこの値に合わせています。
+
+- firmware は 64-bit の `esp_timer_get_time()`（起動からの microsecond）を `double` 秒へ変換して送ります。32-bit の `millis()` は使いません。約49.7日で0へ戻る wrap は発生しません。
+- simulator は `time.monotonic()` 起点で、同じく wrap しません。firmware と simulator の Uptime semantics は一致しています。
+- sine と triangle の位相は、32-bit float へ落とす前に1周期へ畳み込みます。畳み込まない場合、24時間後の位相は約271000 rad に達し、32-bit float の分解能は約0.03 rad まで低下して波形が階段状に見えます。
+- 24時間を超えても値は増え続けます。Meter の針だけが上限で止まります。
+
+これらは `tests/test_simulator.py` と `tests/test_firmware_layout.py` で検証しています。
 
 ## PC だけで最短実行
 
@@ -178,6 +189,8 @@ npx --yes markdownlint-cli2@0.19.0 \
 テストが検証する主な契約:
 
 - frame の6列、数値 format、wave range、button cycle
+- Uptime が `millis()` の wrap 点を越えても増加し続けること
+- wave 位相の1周期畳み込みと、32-bit float 化後の精度
 - CLI option、境界値、`NaN` / `Infinity` / 過大 rate の拒否
 - 指定 count の UDP 送信と標準出力
 - Serial Studio schema、parser、source 接続設定
@@ -185,13 +198,14 @@ npx --yes markdownlint-cli2@0.19.0 \
 - UART / UDP dashboard の意図しない差分
 - group と dataset の ID、`nextUniqueId`
 - Arduino の主 sketch と directory 名の一致
+- firmware が 64-bit timer を使い `millis()` を使わないこと
 
 ## 制約
 
 - `temperatureRead()` は ESP32 内部の chip temperature です。室温センサーではなく、室温より高く表示されることがあります。
 - BOOT button の pin と USB 設定はボードごとに異なります。
 - UDP simulator は IPv4 socket を使用します。
-- 現在の Uptime は firmware の `millis()` 起点です。Meter は1時間で表示上限に達し、値は約49.7日で wrap します。長時間仕様は [#7](https://github.com/hjosugi/serial-lab/issues/7) で追跡します。
+- Uptime の Meter は 24 時間で表示上限に達します。値自体はその後も増え続けますが、針は上限に張り付きます。
 - 自動コンパイルは実機 upload、USB 再接続、Serial Studio GUI の描画を保証しません。
 
 ## トラブルシューティング

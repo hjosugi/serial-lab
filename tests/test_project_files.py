@@ -10,6 +10,11 @@ DASHBOARD_DIR = ROOT / "dashboard"
 UART_PROJECT = "esp32_serial_dashboard.ssproj"
 UDP_PROJECT = "desktop_udp_dashboard.ssproj"
 
+# Supported maximum continuous run time. The firmware reports uptime from a
+# 64-bit timer, so the Meter range is the only limit on how long the dashboard
+# stays readable.
+MAX_UPTIME_S = 86400
+
 EXPECTED_GROUPS = (
     ("ESP32 System", "", ("Chip Temperature", "Free Heap", "Uptime")),
     ("Generated Waveforms", "multiplot", ("Sine Wave", "Triangle Wave")),
@@ -19,7 +24,7 @@ EXPECTED_GROUPS = (
 EXPECTED_DATASETS = (
     (1, "Chip Temperature", "deg C", "gauge", 0, 100),
     (2, "Free Heap", "KiB", "bar", 0, 400),
-    (3, "Uptime", "s", "meter", 0, 3600),
+    (3, "Uptime", "s", "meter", 0, MAX_UPTIME_S),
     (4, "Sine Wave", "", "", -1, 1),
     (5, "Triangle Wave", "", "", -1, 1),
     (6, "BOOT Button", "", "", 0, 1),
