@@ -84,7 +84,7 @@
           "units": "s",
           "value": "",
           "widget": "meter",
-          "widgetMax": 3600,
+          "widgetMax": 86400,
           "widgetMin": 0,
           "xAxis": -2
         }
