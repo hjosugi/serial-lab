@@ -7,8 +7,36 @@ from typing import Any, cast
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DASHBOARD_DIR = ROOT / "dashboard"
+SKETCH = ROOT / "firmware" / "esp32_serial_studio_demo" / "esp32_serial_studio_demo.ino"
 UART_PROJECT = "esp32_serial_dashboard.ssproj"
 UDP_PROJECT = "desktop_udp_dashboard.ssproj"
+
+# Serial Studio stores UART settings as indices into the lists in its
+# app/src/IO/Drivers/UART.cpp, not as literal values. Naming them keeps the
+# assertions readable and stops a literal baud rate being pasted over an index.
+SERIAL_STUDIO_BAUD_RATES = (
+    110,
+    150,
+    300,
+    1200,
+    2400,
+    4800,
+    9600,
+    19200,
+    38400,
+    57600,
+    115200,
+    230400,
+    256000,
+    460800,
+    576000,
+    921600,
+)
+BAUD_115200 = 10
+DATA_BITS_8 = 3
+PARITY_NONE = 0
+STOP_BITS_1 = 0
+FLOW_CONTROL_NONE = 0
 
 # Supported maximum continuous run time. The firmware reports uptime from a
 # 64-bit timer, so the Meter range is the only limit on how long the dashboard
@@ -88,14 +116,29 @@ class ProjectFileTest(unittest.TestCase):
             source["connection"],
             {
                 "autoReconnect": True,
-                "baudRate": 10,
-                "dataBitsIndex": 3,
+                "baudRate": BAUD_115200,
+                "dataBitsIndex": DATA_BITS_8,
                 "dtr": True,
-                "flowControlIndex": 0,
-                "parityIndex": 0,
+                "flowControlIndex": FLOW_CONTROL_NONE,
+                "parityIndex": PARITY_NONE,
                 "portIndex": 0,
-                "stopBitsIndex": 0,
+                "stopBitsIndex": STOP_BITS_1,
             },
+        )
+
+    def test_uart_baud_index_resolves_to_the_firmware_baud_rate(self) -> None:
+        """The project stores a list index; the sketch stores the literal rate.
+
+        Asserting the index alone would still pass if it pointed at the wrong
+        entry, and the mismatch would only surface once a board was connected.
+        """
+        index = self.uart["sources"][0]["connection"]["baudRate"]
+        resolved = SERIAL_STUDIO_BAUD_RATES[index]
+
+        self.assertEqual(resolved, 115200)
+        self.assertIn(
+            f"constexpr uint32_t BAUD_RATE = {resolved};",
+            SKETCH.read_text(encoding="utf-8"),
         )
 
     def test_udp_project(self) -> None:

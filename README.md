@@ -212,7 +212,7 @@ npx --yes markdownlint-cli2@0.19.0 \
 
 ### UART データが表示されない
 
-- ESP32 と Serial Studio が両方 `115200` baud か確認します。
+- ESP32 と Serial Studio が両方 `115200` baud か確認します。`.ssproj` の `baudRate` は baud 値そのものではなく Serial Studio の baud リストへの index で、`10` が `115200` です。手で編集するときは値を直接書かないでください。
 - Arduino IDE の Serial Monitor を閉じます。同じ port は同時に占有できません。
 - Project File mode か確認します。
 - Console で1行に6個の数値が届いているか確認します。
