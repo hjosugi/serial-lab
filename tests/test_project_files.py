@@ -5,6 +5,8 @@ import pathlib
 import unittest
 from typing import Any, cast
 
+from simulator import telemetry_simulator as simulator
+
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 DASHBOARD_DIR = ROOT / "dashboard"
 SKETCH = ROOT / "firmware" / "esp32_serial_studio_demo" / "esp32_serial_studio_demo.ino"
@@ -38,6 +40,14 @@ PARITY_NONE = 0
 STOP_BITS_1 = 0
 FLOW_CONTROL_NONE = 0
 
+# Transport and parsing selectors, likewise stored as enum values rather than
+# names. Checked against SerialStudio.h and IO/Drivers/Network.cpp upstream.
+BUS_TYPE_UART = 0
+BUS_TYPE_NETWORK = 1
+SOCKET_TYPE_UDP = 1
+FRAME_DETECTION_END_DELIMITER_ONLY = 0
+DECODER_METHOD_PLAIN_TEXT = 0
+
 # Supported maximum continuous run time. The firmware reports uptime from a
 # 64-bit timer, so the Meter range is the only limit on how long the dashboard
 # stays readable.
@@ -56,6 +66,18 @@ EXPECTED_DATASETS = (
     (4, "Sine Wave", "", "", -1, 1),
     (5, "Triangle Wave", "", "", -1, 1),
     (6, "BOOT Button", "", "", 0, 1),
+)
+
+# What actually makes the README "Dashboard" column appear: widget selects the
+# per-dataset widget, graph adds it to a plot, and led draws the LED panel.
+# (index, widget, graph, led)
+EXPECTED_DISPLAY = (
+    (1, "gauge", True, False),
+    (2, "bar", False, False),
+    (3, "meter", False, False),
+    (4, "", False, False),
+    (5, "", False, False),
+    (6, "", False, True),
 )
 
 
@@ -91,9 +113,13 @@ class ProjectFileTest(unittest.TestCase):
 
         source = project["sources"][0]
         self.assertEqual(source["sourceId"], 0)
-        self.assertEqual(source["frameDetection"], 0)
+        # Frames are newline-terminated with no start delimiter, so end-only
+        # detection is the mode that matches frameStart/frameEnd below.
+        self.assertEqual(source["frameDetection"], FRAME_DETECTION_END_DELIMITER_ONLY)
         self.assertEqual(source["frameStart"], "")
         self.assertEqual(source["frameEnd"], "\n")
+        # The wire format is ASCII CSV. Any other decoder would fail to parse it.
+        self.assertEqual(source["decoderMethod"], DECODER_METHOD_PLAIN_TEXT)
         self.assertEqual(source["frameParserLanguage"], 2)
         self.assertEqual(source["frameParserTemplate"], "delimited")
         self.assertEqual(source["frameParserParams"]["separator"], ",")
@@ -110,7 +136,7 @@ class ProjectFileTest(unittest.TestCase):
         self.assert_common_project_shape(self.uart)
 
         source = self.uart["sources"][0]
-        self.assertEqual(source["busType"], 0)
+        self.assertEqual(source["busType"], BUS_TYPE_UART)
         self.assertEqual(source["title"], "ESP32 UART")
         self.assertEqual(
             source["connection"],
@@ -145,18 +171,46 @@ class ProjectFileTest(unittest.TestCase):
         self.assert_common_project_shape(self.udp)
 
         source = self.udp["sources"][0]
-        self.assertEqual(source["busType"], 1)
+        self.assertEqual(source["busType"], BUS_TYPE_NETWORK)
         self.assertEqual(source["title"], "Desktop UDP Simulator")
+        # socketTypeIndex 0 is TCP. The simulator only speaks UDP, so an index
+        # of 0 here would leave the dashboard waiting on a connection forever.
         self.assertEqual(
             source["connection"],
             {
                 "address": "127.0.0.1",
-                "socketTypeIndex": 1,
+                "socketTypeIndex": SOCKET_TYPE_UDP,
                 "udpLocalPort": 9000,
                 "udpMulticast": False,
                 "udpRemotePort": 9000,
             },
         )
+
+    def test_udp_port_matches_the_simulator_default(self) -> None:
+        """The project and the simulator have to agree on the port by hand."""
+        connection = self.udp["sources"][0]["connection"]
+
+        self.assertEqual(connection["udpLocalPort"], simulator.DEFAULT_PORT)
+        self.assertEqual(connection["address"], simulator.DEFAULT_HOST)
+
+    def test_display_flags_match_the_documented_dashboard_column(self) -> None:
+        actual = tuple(
+            (dataset["index"], dataset["widget"], dataset["graph"], dataset["led"])
+            for dataset in datasets(self.uart)
+        )
+
+        self.assertEqual(actual, EXPECTED_DISPLAY)
+
+    def test_boot_button_led_trips_between_its_two_states(self) -> None:
+        """The button only ever sends 0 or 1, so the threshold must sit between.
+
+        A ledHigh of 0 would latch the LED on and 1 would never light it.
+        """
+        button = datasets(self.uart)[-1]
+
+        self.assertTrue(button["led"])
+        self.assertGreater(button["ledHigh"], 0)
+        self.assertLess(button["ledHigh"], 1)
 
     def test_dashboard_definitions_do_not_drift_between_transports(self) -> None:
         shared_keys = set(self.uart) - {"sources", "title"}
