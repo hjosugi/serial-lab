@@ -7,6 +7,10 @@ updates:
       interval: monthly
     labels:
       - dependencies
+    groups:
+      actions:
+        patterns:
+          - "*"
 
   - package-ecosystem: pip
     directory: /
@@ -14,3 +18,8 @@ updates:
       interval: monthly
     labels:
       - dependencies
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
